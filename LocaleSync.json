@@ -1,0 +1,1005 @@
+{
+  "name": "LocaleSync",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "gitlab_base_url",
+              "type": "string"
+            },
+            {
+              "name": "android_project_id",
+              "type": "string"
+            },
+            {
+              "name": "android_base_branch",
+              "type": "string"
+            },
+            {
+              "name": "ios_project_id",
+              "type": "string"
+            },
+            {
+              "name": "ios_base_branch",
+              "type": "string"
+            },
+            {
+              "name": "sheet_id",
+              "type": "string"
+            },
+            {
+              "name": "sheet_gid",
+              "type": "number"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        2240,
+        1408
+      ],
+      "id": "execute-workflow-trigger-001",
+      "name": "When called by another workflow"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cfg-1",
+              "name": "gitlab_base_url",
+              "value": "={{ $json.gitlab_base_url }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-2",
+              "name": "android_project_id",
+              "value": "={{ $json.android_project_id }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-3",
+              "name": "android_base_branch",
+              "value": "={{ $json.android_base_branch }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-4",
+              "name": "ios_project_id",
+              "value": "={{ $json.ios_project_id }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-5",
+              "name": "ios_base_branch",
+              "value": "={{ $json.ios_base_branch }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-6",
+              "name": "sheet_id",
+              "value": "={{ $json.sheet_id }}",
+              "type": "string"
+            },
+            {
+              "id": "cfg-7",
+              "name": "sheet_gid",
+              "value": "={{ $json.sheet_gid }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2688,
+        1408
+      ],
+      "id": "project-config-001",
+      "name": "Project Config"
+    },
+    {
+      "parameters": {
+        "content": "## Project Config\nAll values are passed by the parent caller workflow — no defaults live here.\nIf any field is missing, **Validate Config** halts the run immediately with a descriptive error.\n\n| Field | Description |\n|---|---|\n| `gitlab_base_url` | GitLab API base URL (`https://<host>/api/v4`) |\n| `android_project_id` | URL-encoded GitLab project path for the Android repo |\n| `android_base_branch` | Branch to create the string-update branch from |\n| `ios_project_id` | URL-encoded GitLab project path for the iOS repo |\n| `ios_base_branch` | Branch to create the string-update branch from |\n| `sheet_id` | Google Spreadsheet ID (from the sheet URL) |\n| `sheet_gid` | Sheet tab GID (numeric, from the sheet URL `#gid=...`) |\n\nSee **LocaleSync_Parent** for an example of how to pass these values.",
+        "height": 380,
+        "width": 500,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2688,
+        960
+      ],
+      "id": "project-config-note",
+      "name": "Project Config Note"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/projects/{{ $('Project Config').first().json.android_project_id }}/repository/commits",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"branch\": \"string-update-\" + $now.toFormat(\"yyyyMMdd\"), \"commit_message\": \"Update Android strings via n8n\", \"actions\": $('Code to xml in Python').first().json.actions } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5184,
+        2032
+      ],
+      "id": "28fbc91e-cad3-4863-9979-7ed2f829e826",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# 取得方式改用 input_data（跨版本最相容）\nrows = [item[\"json\"] for item in _items] if _items else []\n\nif not rows:\n    return [{\"json\": {\"error\": \"No input detected\"}}]\n\ndef escape_android(value):\n    if value is None:\n        return \"\"\n    value = str(value)\n    return value\n\nen_lines = []\nzh_lines = []\n\nfor row in rows:\n    key = row.get(\"android name\")\n    if not key:\n        continue\n\n    en = escape_android(row.get(\"value(en)\"))\n    zh_raw = row.get(\"value(zh-TW)\")\n    zh = escape_android(zh_raw)\n\n    en_lines.append(f'<string name=\"{key}\">{en}</string>')\n    zh_lines.append(f'<string name=\"{key}\">{zh}</string>')\n\nstrings_en = '<resources>' + ''.join(en_lines) + '</resources>'\nstrings_zh = '<resources>' + ''.join(zh_lines) + '</resources>'\n\nfile_path_en = \"app/src/main/res/values/strings.xml\"\nfile_path_zh = \"app/src/main/res/values-zh-rTW/strings.xml\"\n\nreturn [{\n    \"json\": {\n        \"actions\": [\n            {\n                \"action\": \"update\",\n                \"file_path\": file_path_en,\n                \"content\": strings_en\n            },\n            {\n                \"action\": \"update\",\n                \"file_path\": file_path_zh,\n                \"content\": strings_zh\n            }\n        ],\n        \"strings_en\": strings_en,\n        \"strings_zh\": strings_zh\n    }\n}]\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3104,
+        1904
+      ],
+      "id": "52d496b1-becf-44b1-aec0-3230f7ec5c87",
+      "name": "Code to xml in Python"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "={{ $('Project Config').first().json.sheet_id }}",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "={{ $('Project Config').first().json.sheet_gid }}",
+          "mode": "id"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRange"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2912,
+        1408
+      ],
+      "id": "05579635-1378-4594-a506-73bc981b303f",
+      "name": "Get row(s) in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg = $('Project Config').first().json;\nconst project_id = cfg.ios_project_id;\nconst base_url   = cfg.gitlab_base_url;\nconst branch     = cfg.ios_base_branch;\n\nconst file_path_en = 'en.lproj%2FLocalizable.strings';\nconst file_path_zh = 'zh-Hant.lproj%2FLocalizable.strings';\n\nreturn [\n  { json: { lang: 'en', url: `${base_url}/projects/${project_id}/repository/files/${file_path_en}?ref=${branch}` } },\n  { json: { lang: 'zh', url: `${base_url}/projects/${project_id}/repository/files/${file_path_zh}?ref=${branch}` } }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3152,
+        1168
+      ],
+      "id": "8d132d4a-d334-4944-9c27-1cbce1508a01",
+      "name": "Prepare iOS Fetch URLs"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3376,
+        1168
+      ],
+      "id": "b5b81656-fca4-440f-9815-373ebd90560e",
+      "name": "Fetch iOS Existing Files",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# Decode base64 content from GitLab API and tag with language\nitems = [item[\"json\"] for item in _items] if _items else []\n\ndef decode_base64_utf8(b64_string):\n    if not b64_string:\n        return \"\"\n    alphabet = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"\n    b64_string = b64_string.strip().replace('\\n', '').replace('\\r', '').replace(' ', '')\n    byte_array = []\n    buffer = 0\n    bits = 0\n    for char in b64_string:\n        if char == '=':\n            break\n        if char not in alphabet:\n            continue\n        buffer = (buffer << 6) | alphabet.index(char)\n        bits += 6\n        if bits >= 8:\n            bits -= 8\n            byte = (buffer >> bits) & 0xFF\n            byte_array.append(byte)\n            buffer &= (1 << bits) - 1\n    result = []\n    i = 0\n    while i < len(byte_array):\n        byte = byte_array[i]\n        if byte < 0x80:\n            result.append(chr(byte))\n            i += 1\n        elif byte < 0xE0:\n            if i + 1 < len(byte_array):\n                char_code = ((byte & 0x1F) << 6) | (byte_array[i + 1] & 0x3F)\n                result.append(chr(char_code))\n                i += 2\n            else:\n                i += 1\n        elif byte < 0xF0:\n            if i + 2 < len(byte_array):\n                char_code = ((byte & 0x0F) << 12) | ((byte_array[i + 1] & 0x3F) << 6) | (byte_array[i + 2] & 0x3F)\n                result.append(chr(char_code))\n                i += 3\n            else:\n                i += 1\n        elif byte < 0xF8:\n            if i + 3 < len(byte_array):\n                char_code = ((byte & 0x07) << 18) | ((byte_array[i + 1] & 0x3F) << 12) | ((byte_array[i + 2] & 0x3F) << 6) | (byte_array[i + 3] & 0x3F)\n                result.append(chr(char_code))\n                i += 4\n            else:\n                i += 1\n        else:\n            i += 1\n    return ''.join(result)\n\nresult = []\nfor item in items:\n    lang = item.get(\"lang\", \"\")\n    if not lang:\n        file_path = item.get(\"file_path\", \"\")\n        if \"en.lproj\" in file_path:\n            lang = \"en\"\n        elif \"zh-Hant.lproj\" in file_path:\n            lang = \"zh\"\n    decoded_content = decode_base64_utf8(item.get(\"content\", \"\"))\n    result.append({\n        \"json\": {\n            \"_type\": \"existing_file\",\n            \"lang\": lang,\n            \"decoded_content\": decoded_content\n        }\n    })\n\nreturn result\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3600,
+        1168
+      ],
+      "id": "0d2a7c0e-f8ed-4ddf-abb2-3a512a54bbbb",
+      "name": "Decode iOS Files"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        3600,
+        1408
+      ],
+      "id": "0d48b728-b507-4727-8607-f560fbadc453",
+      "name": "Merge iOS Data"
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# Convert Google Sheet rows to iOS Localizable.strings format\n# Preserves Skip Keys area, deduplicates, updates changed values, %s -> %@\nrows = [item[\"json\"] for item in _items] if _items else []\n\nif not rows:\n    return [{\"json\": {\"error\": \"No input detected\"}}]\n\n# Separate sheet rows from fetched existing file content\nsheet_rows = []\nexisting_en_content = \"\"\nexisting_zh_content = \"\"\n\nfor row in rows:\n    if row.get(\"_type\") == \"existing_file\":\n        decoded = row.get(\"decoded_content\", \"\")\n        if row.get(\"lang\") == \"en\":\n            existing_en_content = decoded\n        elif row.get(\"lang\") == \"zh\":\n            existing_zh_content = decoded\n    else:\n        sheet_rows.append(row)\n\n# Parse .strings content into dict of {key: value}\ndef parse_strings(content):\n    result = {}\n    for line in content.split(\"\\n\"):\n        line = line.strip()\n        if not line or line.startswith(\"//\"):\n            continue\n        # Match pattern: \"key\" = \"value\";\n        if line.startswith('\"') and '\" = \"' in line and line.endswith('\";'):\n            sep = line.index('\" = \"')\n            key = line[1:sep]\n            val = line[sep+5:-2]\n            result[key] = val\n    return result\n\n# Extract header (above // Localized Keys) and parse its key-values\ndef extract_header(content):\n    if not content:\n        return \"\", {}\n    marker = \"// Localized Keys\"\n    idx = content.find(marker)\n    if idx == -1:\n        return content, parse_strings(content)\n    header = content[:idx]\n    return header, parse_strings(header)\n\n# Remove a key line from header text\ndef remove_key_from_header(header, key):\n    lines = header.split(\"\\n\")\n    filtered = []\n    for line in lines:\n        stripped = line.strip()\n        if stripped.startswith('\"' + key + '\"') and '\" = \"' in stripped:\n            continue\n        filtered.append(line)\n    return \"\\n\".join(filtered)\n\n# Process one language\ndef build_strings(existing_content, sheet_keys_values):\n    header, header_dict = extract_header(existing_content)\n    # Also parse existing Localized Keys section\n    marker = \"// Localized Keys\"\n    idx = existing_content.find(marker)\n    existing_localized = {}\n    if idx != -1:\n        localized_section = existing_content[idx:]\n        existing_localized = parse_strings(localized_section)\n    all_existing = {}\n    all_existing.update(header_dict)\n    all_existing.update(existing_localized)\n    updated_header = header\n    new_lines = []\n    for key, val in sheet_keys_values:\n        # Replace %s with %@ for iOS\n        val = val.replace(\"%s\", \"%@\")\n        if key in header_dict:\n            if header_dict[key] == val:\n                # Same value in Skip Keys, skip entirely\n                continue\n            else:\n                # Different value, remove from header, add new to Localized Keys\n                updated_header = remove_key_from_header(updated_header, key)\n                new_lines.append(f'\"{key}\" = \"{val}\";')\n        elif key in existing_localized:\n            if existing_localized[key] == val:\n                # Same value already in Localized Keys, keep as is\n                new_lines.append(f'\"{key}\" = \"{val}\";')\n            else:\n                # Different value, use new value\n                new_lines.append(f'\"{key}\" = \"{val}\";')\n        else:\n            # New key\n            new_lines.append(f'\"{key}\" = \"{val}\";')\n    new_section = \"// Localized Keys\\n\" + \"\\n\".join(new_lines) + \"\\n\"\n    return updated_header + new_section\n\n# Build key-value lists from sheet for each language\nen_kv = []\nzh_kv = []\nfor row in sheet_rows:\n    key = row.get(\"iOS name\")\n    if not key:\n        continue\n    en = str(row.get(\"value(en)\", \"\") or \"\")\n    zh = str(row.get(\"value(zh-TW)\", \"\") or \"\")\n    en_kv.append((key, en))\n    zh_kv.append((key, zh))\n\nstrings_en = build_strings(existing_en_content, en_kv)\nstrings_zh = build_strings(existing_zh_content, zh_kv)\n\nfile_path_en = \"en.lproj/Localizable.strings\"\nfile_path_zh = \"zh-Hant.lproj/Localizable.strings\"\n\nreturn [{\n    \"json\": {\n        \"actions\": [\n            {\n                \"action\": \"update\",\n                \"file_path\": file_path_en,\n                \"content\": strings_en\n            },\n            {\n                \"action\": \"update\",\n                \"file_path\": file_path_zh,\n                \"content\": strings_zh\n            }\n        ],\n        \"strings_en\": strings_en,\n        \"strings_zh\": strings_zh\n    }\n}]\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3824,
+        1408
+      ],
+      "id": "6711e881-3826-425a-be53-5897c8f6a600",
+      "name": "Code to localization.strings in Python"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/projects/{{ $('Project Config').first().json.ios_project_id }}/repository/commits",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"branch\": \"string-update-\" + $now.toFormat(\"yyyyMMdd\"), \"commit_message\": \"Update iOS strings via n8n\", \"actions\": $('Code to localization.strings in Python').first().json.actions } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        5472,
+        1408
+      ],
+      "id": "35216516-b5db-4fd4-94e4-b8f99745472e",
+      "name": "Push commit to GitLab",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/projects/{{ $('Project Config').first().json.android_project_id }}/repository/branches/{{ encodeURIComponent(\"string-update-\" + $now.toFormat(\"yyyyMMdd\")) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3328,
+        1904
+      ],
+      "id": "dc94bd29-596f-41b9-863c-de92d5da6ed2",
+      "name": "Check Android Branch",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "android-branch-check",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3584,
+        1904
+      ],
+      "id": "b80be9bc-212d-4368-b04a-89bc997f5815",
+      "name": "If Android Branch Exists"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/projects/{{ $('Project Config').first().json.android_project_id }}/repository/branches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"branch\": \"string-update-\" + $now.toFormat(\"yyyyMMdd\"), \"ref\": $('Project Config').first().json.android_base_branch } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        3776,
+        2032
+      ],
+      "id": "96ff1d6b-f727-4e3a-a961-9fc3e6917d70",
+      "name": "Create Android Branch",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/projects/{{ $('Project Config').first().json.ios_project_id }}/repository/branches/{{ encodeURIComponent(\"string-update-\" + $now.toFormat(\"yyyyMMdd\")) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4064,
+        1408
+      ],
+      "id": "412f14be-792b-40ea-8e80-0f42c6fe6b85",
+      "name": "Check iOS Branch",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "ios-branch-check",
+              "leftValue": "={{ $json.name }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4272,
+        1408
+      ],
+      "id": "07651e39-5040-4c13-a398-24f23d93d06a",
+      "name": "If iOS Branch Exists"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/projects/{{ $('Project Config').first().json.ios_project_id }}/repository/branches",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"branch\": \"string-update-\" + $now.toFormat(\"yyyyMMdd\"), \"ref\": $('Project Config').first().json.ios_base_branch } }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4480,
+        1568
+      ],
+      "id": "83e8c91b-07d2-4ff8-96dd-ca428ab6da06",
+      "name": "Create iOS Branch",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg         = $('Project Config').first().json;\nconst project_id  = cfg.android_project_id;\nconst base_url    = cfg.gitlab_base_url;\nconst branch_name = $input.first().json.name || '';\n\nconst file_path_en = 'app%2Fsrc%2Fmain%2Fres%2Fvalues%2Fstrings.xml';\nconst file_path_zh = 'app%2Fsrc%2Fmain%2Fres%2Fvalues-zh-rTW%2Fstrings.xml';\n\nreturn [\n  { json: { lang: 'en', url: `${base_url}/projects/${project_id}/repository/files/${file_path_en}?ref=${branch_name}` } },\n  { json: { lang: 'zh', url: `${base_url}/projects/${project_id}/repository/files/${file_path_zh}?ref=${branch_name}` } }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3856,
+        1840
+      ],
+      "id": "a7a91b5d-0abb-4f3f-adf4-0c29149e617b",
+      "name": "Prepare Android Current Fetch URLs"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4064,
+        1840
+      ],
+      "id": "12043036-f08d-470c-835f-da883464e80f",
+      "name": "Fetch Android Current Files",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# Decode base64 Android current file content and tag with language\nitems = [item[\"json\"] for item in _items] if _items else []\n\ndef decode_base64_utf8(b64_string):\n    if not b64_string:\n        return \"\"\n    alphabet = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"\n    b64_string = b64_string.strip().replace('\\n', '').replace('\\r', '').replace(' ', '')\n    byte_array = []\n    buffer = 0\n    bits = 0\n    for char in b64_string:\n        if char == '=':\n            break\n        if char not in alphabet:\n            continue\n        buffer = (buffer << 6) | alphabet.index(char)\n        bits += 6\n        if bits >= 8:\n            bits -= 8\n            byte = (buffer >> bits) & 0xFF\n            byte_array.append(byte)\n            buffer &= (1 << bits) - 1\n    result = []\n    i = 0\n    while i < len(byte_array):\n        byte = byte_array[i]\n        if byte < 0x80:\n            result.append(chr(byte))\n            i += 1\n        elif byte < 0xE0:\n            if i + 1 < len(byte_array):\n                char_code = ((byte & 0x1F) << 6) | (byte_array[i + 1] & 0x3F)\n                result.append(chr(char_code))\n                i += 2\n            else:\n                i += 1\n        elif byte < 0xF0:\n            if i + 2 < len(byte_array):\n                char_code = ((byte & 0x0F) << 12) | ((byte_array[i + 1] & 0x3F) << 6) | (byte_array[i + 2] & 0x3F)\n                result.append(chr(char_code))\n                i += 3\n            else:\n                i += 1\n        elif byte < 0xF8:\n            if i + 3 < len(byte_array):\n                char_code = ((byte & 0x07) << 18) | ((byte_array[i + 1] & 0x3F) << 12) | ((byte_array[i + 2] & 0x3F) << 6) | (byte_array[i + 3] & 0x3F)\n                result.append(chr(char_code))\n                i += 4\n            else:\n                i += 1\n        else:\n            i += 1\n    return ''.join(result)\n\nresult = []\nfor item in items:\n    lang = item.get(\"lang\", \"\")\n    if not lang:\n        file_path = item.get(\"file_path\", \"\")\n        if \"zh-rTW\" in file_path or \"values-zh\" in file_path:\n            lang = \"zh\"\n        else:\n            lang = \"en\"\n    decoded_content = decode_base64_utf8(item.get(\"content\", \"\"))\n    result.append({\n        \"json\": {\n            \"lang\": lang,\n            \"decoded_content\": decoded_content\n        }\n    })\n\nreturn result\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4288,
+        1840
+      ],
+      "id": "f633c335-2ecb-4b37-b3bc-6410a0f69ad7",
+      "name": "Decode Android Current Files"
+    },
+    {
+      "parameters": {
+        "jsCode": "const generatedEn = $('Code to xml in Python').first().json.strings_en || '';\nconst generatedZh = $('Code to xml in Python').first().json.strings_zh || '';\n\nconst fetchedFiles = $input.all();\nlet existingEn = '';\nlet existingZh = '';\n\nfor (const item of fetchedFiles) {\n  if (item.json.lang === 'en') existingEn = item.json.decoded_content || '';\n  if (item.json.lang === 'zh') existingZh = item.json.decoded_content || '';\n}\n\nconst changed = generatedEn !== existingEn || generatedZh !== existingZh;\nreturn [{ json: { changed } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4528,
+        1840
+      ],
+      "id": "55674b40-4e6b-4f56-a8cc-ad82ab24a430",
+      "name": "Compare Android Content"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "android-changed-check",
+              "leftValue": "={{ $json.changed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4848,
+        1840
+      ],
+      "id": "1fd66da9-0ded-4629-a1e4-653ce707046e",
+      "name": "If Android Changed"
+    },
+    {
+      "parameters": {
+        "jsCode": "const cfg         = $('Project Config').first().json;\nconst project_id  = cfg.ios_project_id;\nconst base_url    = cfg.gitlab_base_url;\nconst branch_name = $input.first().json.name || '';\n\nconst file_path_en = 'en.lproj%2FLocalizable.strings';\nconst file_path_zh = 'zh-Hant.lproj%2FLocalizable.strings';\n\nreturn [\n  { json: { lang: 'en', url: `${base_url}/projects/${project_id}/repository/files/${file_path_en}?ref=${branch_name}` } },\n  { json: { lang: 'zh', url: `${base_url}/projects/${project_id}/repository/files/${file_path_zh}?ref=${branch_name}` } }\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4480,
+        1248
+      ],
+      "id": "5257085a-e3ca-447d-b40b-3272f855cd6a",
+      "name": "Prepare iOS Current Fetch URLs"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        4672,
+        1248
+      ],
+      "id": "995032e1-4cf6-4282-859f-e04f6a32f338",
+      "name": "Fetch iOS Current Files",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      },
+      "continueOnFail": true
+    },
+    {
+      "parameters": {
+        "language": "pythonNative",
+        "pythonCode": "# Decode base64 iOS current file content and tag with language\nitems = [item[\"json\"] for item in _items] if _items else []\n\ndef decode_base64_utf8(b64_string):\n    if not b64_string:\n        return \"\"\n    alphabet = \"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/\"\n    b64_string = b64_string.strip().replace('\\n', '').replace('\\r', '').replace(' ', '')\n    byte_array = []\n    buffer = 0\n    bits = 0\n    for char in b64_string:\n        if char == '=':\n            break\n        if char not in alphabet:\n            continue\n        buffer = (buffer << 6) | alphabet.index(char)\n        bits += 6\n        if bits >= 8:\n            bits -= 8\n            byte = (buffer >> bits) & 0xFF\n            byte_array.append(byte)\n            buffer &= (1 << bits) - 1\n    result = []\n    i = 0\n    while i < len(byte_array):\n        byte = byte_array[i]\n        if byte < 0x80:\n            result.append(chr(byte))\n            i += 1\n        elif byte < 0xE0:\n            if i + 1 < len(byte_array):\n                char_code = ((byte & 0x1F) << 6) | (byte_array[i + 1] & 0x3F)\n                result.append(chr(char_code))\n                i += 2\n            else:\n                i += 1\n        elif byte < 0xF0:\n            if i + 2 < len(byte_array):\n                char_code = ((byte & 0x0F) << 12) | ((byte_array[i + 1] & 0x3F) << 6) | (byte_array[i + 2] & 0x3F)\n                result.append(chr(char_code))\n                i += 3\n            else:\n                i += 1\n        elif byte < 0xF8:\n            if i + 3 < len(byte_array):\n                char_code = ((byte & 0x07) << 18) | ((byte_array[i + 1] & 0x3F) << 12) | ((byte_array[i + 2] & 0x3F) << 6) | (byte_array[i + 3] & 0x3F)\n                result.append(chr(char_code))\n                i += 4\n            else:\n                i += 1\n        else:\n            i += 1\n    return ''.join(result)\n\nresult = []\nfor item in items:\n    lang = item.get(\"lang\", \"\")\n    if not lang:\n        file_path = item.get(\"file_path\", \"\")\n        if \"en.lproj\" in file_path:\n            lang = \"en\"\n        elif \"zh-Hant.lproj\" in file_path:\n            lang = \"zh\"\n    decoded_content = decode_base64_utf8(item.get(\"content\", \"\"))\n    result.append({\n        \"json\": {\n            \"lang\": lang,\n            \"decoded_content\": decoded_content\n        }\n    })\n\nreturn result\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4880,
+        1248
+      ],
+      "id": "b782bc27-f1bf-47c8-b814-ca86714df080",
+      "name": "Decode iOS Current Files"
+    },
+    {
+      "parameters": {
+        "jsCode": "const generatedEn = $('Code to localization.strings in Python').first().json.strings_en || '';\nconst generatedZh = $('Code to localization.strings in Python').first().json.strings_zh || '';\n\nconst fetchedFiles = $input.all();\nlet existingEn = '';\nlet existingZh = '';\n\nfor (const item of fetchedFiles) {\n  if (item.json.lang === 'en') existingEn = item.json.decoded_content || '';\n  if (item.json.lang === 'zh') existingZh = item.json.decoded_content || '';\n}\n\nconst changed = generatedEn !== existingEn || generatedZh !== existingZh;\nreturn [{ json: { changed } }];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5072,
+        1248
+      ],
+      "id": "d7c6e3b7-9419-4df1-b8b8-c3c53eaaafcd",
+      "name": "Compare iOS Content"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "ios-changed-check",
+              "leftValue": "={{ $json.changed }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        5280,
+        1248
+      ],
+      "id": "958c6ecc-48e8-4ec5-a97f-694a3a363126",
+      "name": "If iOS Changed"
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Project Config').first().json.gitlab_base_url }}/user",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        2688,
+        1648
+      ],
+      "id": "preflight-gitlab-auth-001",
+      "name": "Pre-flight: Verify GitLab Auth",
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const required = [\n  'gitlab_base_url',\n  'android_project_id',\n  'android_base_branch',\n  'ios_project_id',\n  'ios_base_branch',\n  'sheet_id',\n  'sheet_gid',\n];\n\nconst cfg = $input.first().json;\nconst missing = required.filter(k => cfg[k] === undefined || cfg[k] === null || cfg[k] === '');\n\nif (missing.length > 0) {\n  throw new Error(\n    'LocaleSync: missing required config fields from caller: ' + missing.join(', ') + '. '\n    + 'Pass all fields via the Execute Workflow node in the parent workflow.'\n  );\n}\n\nreturn [$input.first()];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2464,
+        1408
+      ],
+      "id": "validate-config-001",
+      "name": "Validate Config"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get row(s) in sheet1": {
+      "main": [
+        [
+          {
+            "node": "Merge iOS Data",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Prepare iOS Fetch URLs",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Code to xml in Python",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code to xml in Python": {
+      "main": [
+        [
+          {
+            "node": "Check Android Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Android Branch": {
+      "main": [
+        [
+          {
+            "node": "If Android Branch Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Android Branch Exists": {
+      "main": [
+        [
+          {
+            "node": "Prepare Android Current Fetch URLs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create Android Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Android Current Fetch URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Android Current Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Android Current Files": {
+      "main": [
+        [
+          {
+            "node": "Decode Android Current Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode Android Current Files": {
+      "main": [
+        [
+          {
+            "node": "Compare Android Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Android Content": {
+      "main": [
+        [
+          {
+            "node": "If Android Changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Android Changed": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Android Branch": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare iOS Fetch URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch iOS Existing Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch iOS Existing Files": {
+      "main": [
+        [
+          {
+            "node": "Decode iOS Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode iOS Files": {
+      "main": [
+        [
+          {
+            "node": "Merge iOS Data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge iOS Data": {
+      "main": [
+        [
+          {
+            "node": "Code to localization.strings in Python",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code to localization.strings in Python": {
+      "main": [
+        [
+          {
+            "node": "Check iOS Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check iOS Branch": {
+      "main": [
+        [
+          {
+            "node": "If iOS Branch Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If iOS Branch Exists": {
+      "main": [
+        [
+          {
+            "node": "Prepare iOS Current Fetch URLs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create iOS Branch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare iOS Current Fetch URLs": {
+      "main": [
+        [
+          {
+            "node": "Fetch iOS Current Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch iOS Current Files": {
+      "main": [
+        [
+          {
+            "node": "Decode iOS Current Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decode iOS Current Files": {
+      "main": [
+        [
+          {
+            "node": "Compare iOS Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare iOS Content": {
+      "main": [
+        [
+          {
+            "node": "If iOS Changed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If iOS Changed": {
+      "main": [
+        [
+          {
+            "node": "Push commit to GitLab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create iOS Branch": {
+      "main": [
+        [
+          {
+            "node": "Push commit to GitLab",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project Config": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Pre-flight: Verify GitLab Auth",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When called by another workflow": {
+      "main": [
+        [
+          {
+            "node": "Validate Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Config": {
+      "main": [
+        [
+          {
+            "node": "Project Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": []
+}

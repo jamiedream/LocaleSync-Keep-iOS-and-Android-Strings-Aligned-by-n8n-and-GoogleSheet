@@ -1,0 +1,250 @@
+{
+  "name": "LocaleSync Parent",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "minutesInterval": 1,
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0,
+              "daysInterval": 1,
+              "weeksInterval": 1,
+              "triggerAtDay": [
+                1
+              ],
+              "monthsInterval": 1,
+              "triggerAtDayOfMonth": 1
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        240,
+        400
+      ],
+      "id": "schedule-trigger-001",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p1-1",
+              "name": "gitlab_base_url",
+              "value": "https://<your-gitlab-host>/api/v4",
+              "type": "string"
+            },
+            {
+              "id": "p1-2",
+              "name": "android_project_id",
+              "value": "<org>%2F<group>%2F<android-repo>",
+              "type": "string"
+            },
+            {
+              "id": "p1-3",
+              "name": "android_base_branch",
+              "value": "master",
+              "type": "string"
+            },
+            {
+              "id": "p1-4",
+              "name": "ios_project_id",
+              "value": "<org>%2F<group>%2F<ios-repo>",
+              "type": "string"
+            },
+            {
+              "id": "p1-5",
+              "name": "ios_base_branch",
+              "value": "main",
+              "type": "string"
+            },
+            {
+              "id": "p1-6",
+              "name": "sheet_id",
+              "value": "<your-spreadsheet-id>",
+              "type": "string"
+            },
+            {
+              "id": "p1-7",
+              "name": "sheet_gid",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        464,
+        400
+      ],
+      "id": "project-a-config-001",
+      "name": "Project A Config"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "p2-1",
+              "name": "gitlab_base_url",
+              "value": "https://<your-gitlab-host>/api/v4",
+              "type": "string"
+            },
+            {
+              "id": "p2-2",
+              "name": "android_project_id",
+              "value": "<org>%2F<group>%2F<android-repo>",
+              "type": "string"
+            },
+            {
+              "id": "p2-3",
+              "name": "android_base_branch",
+              "value": "master",
+              "type": "string"
+            },
+            {
+              "id": "p2-4",
+              "name": "ios_project_id",
+              "value": "<org>%2F<group>%2F<ios-repo>",
+              "type": "string"
+            },
+            {
+              "id": "p2-5",
+              "name": "ios_base_branch",
+              "value": "main",
+              "type": "string"
+            },
+            {
+              "id": "p2-6",
+              "name": "sheet_id",
+              "value": "<your-spreadsheet-id>",
+              "type": "string"
+            },
+            {
+              "id": "p2-7",
+              "name": "sheet_gid",
+              "value": 0,
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        464,
+        560
+      ],
+      "id": "project-b-config-001",
+      "name": "Project B Config"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<localesync-workflow-id>",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        688,
+        400
+      ],
+      "id": "run-for-project-a-001",
+      "name": "Run for Project A"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "<localesync-workflow-id>",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.1,
+      "position": [
+        688,
+        560
+      ],
+      "id": "run-for-project-b-001",
+      "name": "Run for Project B"
+    },
+    {
+      "parameters": {
+        "content": "## Setup — do this after importing both workflows\n\n**Step 1 — Get LocaleSync's ID**\nOpen LocaleSync in n8n → copy the workflow ID from the URL:\n`/workflow/<ID>`\n\n**Step 2 — Paste it here**\nOpen each \"Run for Project\" Execute Workflow node in this canvas\nand replace the Workflow ID field with the copied ID.\n\n---\n\n## Adding a project\n1. Duplicate any existing \"Project X Config\" Set node.\n2. Update the 7 fields (see sticky note in LocaleSync canvas).\n3. Wire: Schedule Trigger → new Config node → Run LocaleSync.",
+        "height": 200,
+        "width": 420,
+        "color": 4
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        160
+      ],
+      "id": "parent-note-001",
+      "name": "Parent Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Project A Config",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Project B Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project A Config": {
+      "main": [
+        [
+          {
+            "node": "Run for Project A",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project B Config": {
+      "main": [
+        [
+          {
+            "node": "Run for Project B",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
